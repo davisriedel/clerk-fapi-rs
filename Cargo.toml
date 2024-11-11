@@ -1,0 +1,36 @@
+[package]
+name = "clerk-fapi-rs"
+version = "0.1.0"
+authors = ["@Nipsuli"]
+description = "The Clerk REST Frontend API, meant to be accessed from a browser or native environment.  This is a Form Based API and all the data must be sent and formatted according to the `application/x-www-form-urlencoded` content type.  ### Versions  When the API changes in a way that isn't compatible with older versions, a new version is released. Each version is identified by its release date, e.g. `2021-02-05`. For more information, please see [Clerk API Versions](https://clerk.com/docs/backend-requests/versioning/overview).  ### Using the Try It Console  The `Try It` feature of the docs only works for **Development Instances** when using the `DevBrowser` security scheme. To use it, first generate a dev instance token from the `/v1/dev_browser` endpoint.  Please see https://clerk.com/docs for more information."
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.12.0", features = ["json", "multipart"] }
+reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
+anyhow = "1.0.0"
+serde = { version = "^1.0", features = ["derive"] }
+serde_with = { version = "^3.8", default-features = false, features = [
+    "base64",
+    "std",
+    "macros",
+] }
+serde_json = "^1.0"
+serde_repr = "^0.1"
+url = "^2.5"
+uuid = { version = "^1.8", features = ["serde", "v4"] }
+http = "1.0.0"
+base64 = "0.21"
+parking_lot = "0.12"
+pin-project-lite = "0.2"
+futures = "0.3"
+tokio = { version = "1.0", features = ["sync"] }
+chrono = "0.4.38"
+async-trait = "0.1"
+
+[dev-dependencies]
+clerk-fapi-rs = { path = "." } 
+dotenv = "0.15"
+tokio = { version = "1.0", features = ["full", "test-util", "rt-multi-thread"] }
+mockito = "1.2"
