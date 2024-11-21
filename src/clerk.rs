@@ -58,7 +58,7 @@ impl Clerk {
     }
 
     /// getter for the api_client
-    pub fn api_client(&self) -> &ClerkFapiClient {
+    pub fn get_fapi_client(&self) -> &ClerkFapiClient {
         &self.api_client
     }
 

@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let email = read_input("Please enter your email address: ");
             
             // Create sign-in attempt
-            let sign_in_response = clerk.api_client()
+            let sign_in_response = clerk.get_fapi_client()
                 .create_sign_in(
                     Some("email_code"),
                     Some(&email),
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let code = read_input("Enter verification code: ");
 
             // Attempt first factor verification
-            let verification_response = clerk.api_client()
+            let verification_response = clerk.get_fapi_client()
                 .attempt_sign_in_factor_one(
                     &sign_in_id,
                     Some("email_code"),
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Ticket flow
             let ticket = read_input("Please enter your ticket: ");
             
-            let sign_in_response = clerk.api_client()
+            let sign_in_response = clerk.get_fapi_client()
                 .create_sign_in(
                     Some("ticket"),
                     None, // identifier
@@ -138,6 +138,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("Could not retrieve user information");
     }
+
+    let memberships = clerk.get_fapi_client().get_organization_memberships(None, None).await.unwrap();
+    println!("\nOrganizations:");
+    let data = *memberships.response;
+    match data {
+        clerk_fapi_rs::models::ClientClientWrappedOrganizationMembershipsResponse::ClientClientWrappedOrganizationMembershipsResponseOneOf(memberships) => {
+            let mems = (*memberships).data.unwrap();
+            println!("Found {} memberships (1): ", mems.len());
+            for membership in mems {
+                let org = membership.organization.unwrap();
+                let name = org.name.unwrap();
+                println!("- Organization: {}", name);
+            }
+        },
+        clerk_fapi_rs::models::ClientClientWrappedOrganizationMembershipsResponse::Array(memberships) => {
+            println!("Found {} memberships (2): ", memberships.len());
+            for membership in memberships {
+                let org = membership.organization.unwrap();
+                let name = org.name.unwrap();
+                println!("- Organization: {}", name);
+            }
+        },
+    };
 
     Ok(())
 }
