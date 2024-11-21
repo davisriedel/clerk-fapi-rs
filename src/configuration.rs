@@ -278,6 +278,19 @@ impl fmt::Display for ClerkFapiConfiguration {
     }
 }
 
+impl Default for ClerkFapiConfiguration {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            instance_type: String::new(),
+            frontend_api: String::new(),
+            user_agent: format!("{}/{}", NAME, VERSION),
+            store: Arc::new(DefaultStore::default()),
+            store_prefix: "ClerkFapi:".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +486,19 @@ mod tests {
 
         // Verify with direct store access
         assert!(!config.store().has("Test:key1"));
+    }
+
+    #[test]
+    fn test_default_implementation() {
+        let config = ClerkFapiConfiguration::default();
+        assert_eq!(config.base_url(), "");
+        assert_eq!(config.instance_type(), "");
+        assert_eq!(config.frontend_api(), "");
+        assert_eq!(config.user_agent(), format!("{}/{}", NAME, VERSION));
+        assert_eq!(config.store_prefix(), "ClerkFapi:");
+        
+        // Test that the default store works
+        config.set_store_value("test_key", "test_value");
+        assert!(config.has_store_value("test_key"));
     }
 }

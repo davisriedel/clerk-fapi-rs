@@ -2017,3 +2017,35 @@ impl ClerkFapiClient {
         well_known_api::get_open_id_configuration(&self.config).await
     }
 }
+
+// Add this implementation after the ClerkFapiClient struct definition
+impl Default for ClerkFapiClient {
+    fn default() -> Self {
+        // Create default configuration
+        let config = ClerkFapiConfiguration::default();
+        
+        // Create the client, using empty string as fallback in case of error
+        Self::new(config).unwrap_or_else(|_| {
+            // Create a minimal working client with default configuration
+            let api_config = ApiConfiguration::new();
+            Self {
+                config: Arc::new(api_config),
+                update_client_callback: Arc::new(RwLock::new(None)),
+            }
+        })
+    }
+}
+
+// Add this test to verify the implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_client() {
+        let client = ClerkFapiClient::default();
+        assert_eq!(client.config.base_path, "");
+        assert!(client.config.user_agent.is_none());
+        assert!(client.update_client_callback.read().unwrap().is_none());
+    }
+}

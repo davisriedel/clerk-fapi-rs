@@ -13,7 +13,7 @@ use std::time::Duration;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
 /// The main client for interacting with Clerk's Frontend API
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Clerk {
     config: Arc<ClerkFapiConfiguration>,
     state: Arc<RwLock<ClerkState>>,
@@ -1422,7 +1422,7 @@ mod tests {
                   "id": "client_xyz789abcdef123456",
                   "sessions": [
                     {
-                      "object": "session", 
+                      "object": "session",
                       "id": "sess_abc123xyz456def789",
                       "status": "active",
                       "expire_at": 1731932703435i64,
@@ -1448,7 +1448,7 @@ mod tests {
                         "email_addresses": [
                           {
                             "id": "idn_456def789abc123",
-                            "object": "email_address", 
+                            "object": "email_address",
                             "email_address": "john.doe@example.com",
                             "reserved": false,
                             "verification": {
@@ -1546,14 +1546,14 @@ mod tests {
                             }
                           },
                           {
-                            "object": "organization_membership", 
+                            "object": "organization_membership",
                             "id": "orgmem_789def123xyz456",
                             "public_metadata": {},
                             "role": "org:admin",
                             "role_name": "Admin",
                             "permissions": [
                               "org:sys_profile:manage",
-                              "org:sys_profile:delete", 
+                              "org:sys_profile:delete",
                               "org:sys_memberships:read",
                               "org:sys_memberships:manage",
                               "org:sys_domains:read",
