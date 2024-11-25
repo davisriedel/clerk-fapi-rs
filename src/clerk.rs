@@ -54,8 +54,8 @@ impl Clerk {
         let callback = Box::new(move |client| {
             let clerk = clerk_clone.clone();
             Box::pin(async move { clerk.update_client(client).await })
-                as Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
-        });
+                as Pin<Box<dyn Future<Output = Result<(), String>> + Send + Sync>>
+        }) as Box<dyn Fn(Client) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + Sync>> + Send + Sync>;
 
         // Set the callback on the API client
         api_client.set_update_client_callback(callback);

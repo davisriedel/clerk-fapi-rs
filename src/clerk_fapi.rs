@@ -85,12 +85,8 @@ impl Middleware for AuthorizationMiddleware {
 }
 
 // Add this type alias for the callback signature
-pub type UpdateClientCallback = Box<
-    dyn Fn(
-            client_period_client::ClientPeriodClient,
-        ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>
-        + Send
-        + Sync,
+type UpdateClientCallback = Box<
+    dyn Fn(client_period_client::ClientPeriodClient) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + Sync>> + Send + Sync
 >;
 
 /// The main client for interacting with Clerk's Frontend API
