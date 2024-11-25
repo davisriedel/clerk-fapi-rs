@@ -425,7 +425,7 @@ impl Clerk {
     ///
     /// Returns an error if the API call fails
     pub async fn sign_out(&self, session_id: Option<String>) -> Result<(), String> {
-        let new_client = match session_id {
+        match session_id {
             Some(sid) => {
                 self.api_client
                     .remove_session(&sid)
@@ -441,8 +441,7 @@ impl Clerk {
                     .client
             }
         };
-
-        self.update_client(*new_client).await?;
+        // The remove sessions calls will update the client state via the callback
 
         Ok(())
     }
