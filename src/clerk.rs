@@ -23,7 +23,7 @@ pub struct Clerk {
     listeners: Arc<Mutex<Vec<ListenerCallback>>>,
 }
 
-type ListenerCallback = Box<dyn Fn(Client, Option<Session>, Option<User>, Option<Organization>) + Send + Sync>;
+type ListenerCallback = Box<dyn Fn(Client, Option<Session>, Option<User>, Option<Organization>) + Send + Sync + 'static>;
 
 #[derive(Default)]
 struct ClerkState {
@@ -596,12 +596,27 @@ impl Clerk {
 
     /// Adds a listener that will be called whenever the client state changes
     /// The listener receives the current Client, Session, User and Organization state
+    /// If there's already a loaded client, the callback will be called immediately
     pub fn add_listener<F>(&self, callback: F)
     where
-        F: Fn(Client, Option<Session>, Option<User>, Option<Organization>) + Send + Sync + 'static,
+        F: Fn(Client, Option<Session>, Option<User>, Option<Organization>) + Send + Sync + Clone + 'static,
     {
         let mut listeners = self.listeners.lock().unwrap();
-        listeners.push(Box::new(callback));
+        listeners.push(Box::new(callback.clone()));
+
+        // If we already have a loaded client, call the callback immediately
+        if let Ok(state) = self.state.try_read() {
+            if let Some(client) = state.client.clone() {
+                let session = state.session.clone();
+                let user = state.user.clone();
+                let organization = state.organization.clone();
+                
+                // Drop the read lock before calling the callback
+                drop(state);
+                
+                callback(client, session, user, organization);
+            }
+        }
     }
 }
 
@@ -1778,6 +1793,48 @@ mod tests {
         clerk.update_client(test_client).await.unwrap();
 
         // Verify listener was called
+        assert!(was_called.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_listener_immediate_callback() {
+        let config = ClerkFapiConfiguration::new(
+            "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let clerk = Clerk::new(config);
+        
+        // Set up initial state
+        let test_client = Client {
+            id: Some("test_client".to_string()),
+            sessions: vec![Session {
+                id: Some("test_session".to_string()),
+                user: Some(Some(Box::new(User::default()))),
+                ..Default::default()
+            }],
+            last_active_session_id: Some("test_session".to_string()),
+            ..Default::default()
+        };
+
+        // Update client before adding listener
+        clerk.update_client(test_client).await.unwrap();
+
+        let was_called = Arc::new(AtomicBool::new(false));
+        let was_called_clone = was_called.clone();
+
+        // Add a listener - should be called immediately
+        clerk.add_listener(move |client, session, user, org| {
+            assert_eq!(client.id, Some("test_client".to_string()));
+            assert!(session.is_some());
+            assert!(user.is_some());
+            assert!(org.is_none());
+            was_called_clone.store(true, Ordering::SeqCst);
+        });
+
+        // Verify listener was called immediately
         assert!(was_called.load(Ordering::SeqCst));
     }
 }
