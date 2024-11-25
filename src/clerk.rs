@@ -11,6 +11,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, RwLockWriteGuard};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The main client for interacting with Clerk's Frontend API
 #[derive(Clone, Default)]
@@ -18,7 +20,10 @@ pub struct Clerk {
     config: Arc<ClerkFapiConfiguration>,
     state: Arc<RwLock<ClerkState>>,
     api_client: Arc<ClerkFapiClient>,
+    listeners: Arc<Mutex<Vec<ListenerCallback>>>,
 }
+
+type ListenerCallback = Box<dyn Fn(Client, Option<Session>, Option<User>, Option<Organization>) + Send + Sync>;
 
 #[derive(Default)]
 struct ClerkState {
@@ -41,6 +46,7 @@ impl Clerk {
             config: Arc::new(config),
             state: Arc::new(RwLock::new(ClerkState::default())),
             api_client: api_client.clone(),
+            listeners: Arc::new(Mutex::new(Vec::new())),
         };
 
         // Create and set the callback
@@ -275,9 +281,29 @@ impl Clerk {
         // Save client to store
         self.config.set_store_value(
             "client",
-            serde_json::to_value(fresh_client)
+            serde_json::to_value(fresh_client.clone())
                 .map_err(|e| format!("Failed to serialize client: {}", e))?,
         );
+
+        // Get current state for listeners
+        let current_session = state.session.clone();
+        let current_user = state.user.clone();
+        let current_organization = state.organization.clone();
+
+        // Drop the write lock before notifying listeners
+        drop(state);
+
+        // Notify all listeners
+        if let Ok(listeners) = self.listeners.lock() {
+            for listener in listeners.iter() {
+                listener(
+                    fresh_client.clone(),
+                    current_session.clone(),
+                    current_user.clone(),
+                    current_organization.clone(),
+                );
+            }
+        }
 
         Ok(())
     }
@@ -566,6 +592,16 @@ impl Clerk {
         );
 
         Ok(())
+    }
+
+    /// Adds a listener that will be called whenever the client state changes
+    /// The listener receives the current Client, Session, User and Organization state
+    pub fn add_listener<F>(&self, callback: F)
+    where
+        F: Fn(Client, Option<Session>, Option<User>, Option<Organization>) + Send + Sync + 'static,
+    {
+        let mut listeners = self.listeners.lock().unwrap();
+        listeners.push(Box::new(callback));
     }
 }
 
@@ -1702,5 +1738,46 @@ mod tests {
         }
         let token = client.get_token(None, None).await.unwrap();
         assert_eq!(token, None);
+    }
+
+    #[tokio::test]
+    async fn test_listener() {
+        let config = ClerkFapiConfiguration::new(
+            "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let clerk = Clerk::new(config);
+        let was_called = Arc::new(AtomicBool::new(false));
+        let was_called_clone = was_called.clone();
+
+        // Add a listener
+        clerk.add_listener(move |client, session, user, org| {
+            assert_eq!(client.id, Some("test_client".to_string()));
+            assert!(session.is_some());
+            assert!(user.is_some());
+            assert!(org.is_none());
+            was_called_clone.store(true, Ordering::SeqCst);
+        });
+
+        // Create test data
+        let test_client = Client {
+            id: Some("test_client".to_string()),
+            sessions: vec![Session {
+                id: Some("test_session".to_string()),
+                user: Some(Some(Box::new(User::default()))),
+                ..Default::default()
+            }],
+            last_active_session_id: Some("test_session".to_string()),
+            ..Default::default()
+        };
+
+        // Update client which should trigger listener
+        clerk.update_client(test_client).await.unwrap();
+
+        // Verify listener was called
+        assert!(was_called.load(Ordering::SeqCst));
     }
 }

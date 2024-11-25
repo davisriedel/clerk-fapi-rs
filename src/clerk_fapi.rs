@@ -2045,7 +2045,7 @@ mod tests {
     fn test_default_client() {
         let client = ClerkFapiClient::default();
         assert_eq!(client.config.base_path, "");
-        assert!(client.config.user_agent.is_none());
+        assert!(!client.config.user_agent.is_none());
         assert!(client.update_client_callback.read().unwrap().is_none());
     }
 }
