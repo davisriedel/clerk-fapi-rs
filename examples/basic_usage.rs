@@ -1,8 +1,11 @@
 use clerk_fapi_rs::{clerk::Clerk, configuration::ClerkFapiConfiguration};
 use dotenv::dotenv;
-use std::{env, io::{self, Write}};
-use tokio::time::sleep;
 use std::time::Duration;
+use std::{
+    env,
+    io::{self, Write},
+};
+use tokio::time::sleep;
 
 fn read_input(prompt: &str) -> String {
     print!("{}", prompt);
@@ -22,8 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create configuration
     let config = ClerkFapiConfiguration::new(
-        public_key,
-        None, // Use default API URL
+        public_key, None, // Use default API URL
         None, // Use default store
     )?;
 
@@ -44,9 +46,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "1" => {
             // Email Code flow
             let email = read_input("Please enter your email address: ");
-            
+
             // Create sign-in attempt
-            let sign_in_response = clerk.get_fapi_client()
+            let sign_in_response = clerk
+                .get_fapi_client()
                 .create_sign_in(
                     Some("email_code"),
                     Some(&email),
@@ -64,11 +67,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("We've sent a verification code to your email.");
             println!("Please check your inbox and enter the code below.");
-            
+
             let code = read_input("Enter verification code: ");
 
             // Attempt first factor verification
-            let verification_response = clerk.get_fapi_client()
+            let verification_response = clerk
+                .get_fapi_client()
                 .attempt_sign_in_factor_one(
                     &sign_in_id,
                     Some("email_code"),
@@ -81,18 +85,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
 
-            if verification_response.response.status == clerk_fapi_rs::models::client_period_sign_in::Status::Complete {
+            if verification_response.response.status
+                == clerk_fapi_rs::models::client_period_sign_in::Status::Complete
+            {
                 println!("Sign in successful!");
             } else {
-                println!("Sign in failed. Status: {:?}", verification_response.response.status);
+                println!(
+                    "Sign in failed. Status: {:?}",
+                    verification_response.response.status
+                );
                 return Ok(());
             }
         }
         "2" => {
             // Ticket flow
             let ticket = read_input("Please enter your ticket: ");
-            
-            let sign_in_response = clerk.get_fapi_client()
+
+            let sign_in_response = clerk
+                .get_fapi_client()
                 .create_sign_in(
                     Some("ticket"),
                     None, // identifier
@@ -106,10 +116,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
 
-            if sign_in_response.response.status == clerk_fapi_rs::models::client_period_sign_in::Status::Complete {
+            if sign_in_response.response.status
+                == clerk_fapi_rs::models::client_period_sign_in::Status::Complete
+            {
                 println!("Sign in successful!");
             } else {
-                println!("Sign in failed. Status: {:?}", sign_in_response.response.status);
+                println!(
+                    "Sign in failed. Status: {:?}",
+                    sign_in_response.response.status
+                );
                 return Ok(());
             }
         }
@@ -125,11 +140,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get and display user information
     if let Some(user) = clerk.user().await {
         println!("\nUser Information:");
-        println!("Name: {:?} {:?}", 
-            user.first_name.unwrap_or_default(), 
+        println!(
+            "Name: {:?} {:?}",
+            user.first_name.unwrap_or_default(),
             user.last_name.unwrap_or_default()
         );
-        
+
         if let Some(email_addresses) = user.email_addresses {
             if !email_addresses.is_empty() {
                 println!("Email: {}", email_addresses[0].email_address);
@@ -139,7 +155,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Could not retrieve user information");
     }
 
-    let memberships = clerk.get_fapi_client().get_organization_memberships(None, None).await.unwrap();
+    let memberships = clerk
+        .get_fapi_client()
+        .get_organization_memberships(None, None)
+        .await
+        .unwrap();
     println!("\nOrganizations:");
     let data = *memberships.response;
     match data {

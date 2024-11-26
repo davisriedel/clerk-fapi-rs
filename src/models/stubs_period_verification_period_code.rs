@@ -60,4 +60,4 @@ impl Default for Strategy {
     fn default() -> Strategy {
         Self::EmailCode
     }
-} 
+}

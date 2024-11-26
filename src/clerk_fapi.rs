@@ -13,8 +13,8 @@ use reqwest_middleware::{
 use serde_json::Value as JsonValue;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::sync::RwLock;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 // Add middleware definitions
 #[derive(Clone)]
@@ -84,12 +84,22 @@ impl Middleware for AuthorizationMiddleware {
     }
 }
 
-
 /// The main client for interacting with Clerk's Frontend API
 #[derive(Clone)]
 pub struct ClerkFapiClient {
     config: Arc<ApiConfiguration>,
-    update_client_callback: Option<Arc<Mutex<Box<dyn FnMut(client_period_client::ClientPeriodClient) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>>>>
+    update_client_callback: Option<
+        Arc<
+            Mutex<
+                Box<
+                    dyn FnMut(
+                            client_period_client::ClientPeriodClient,
+                        ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+                        + Send,
+                >,
+            >,
+        >,
+    >,
 }
 
 impl ClerkFapiClient {
@@ -133,11 +143,11 @@ impl ClerkFapiClient {
         F: FnMut(client_period_client::ClientPeriodClient) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-            let mut callback = callback;
-            self.update_client_callback = Some(Arc::new(Mutex::new(Box::new(move |client| {
-                // Wrap the future in a Pin<Box<>> for storage
-                Box::pin(callback(client))
-            }))));
+        let mut callback = callback;
+        self.update_client_callback = Some(Arc::new(Mutex::new(Box::new(move |client| {
+            // Wrap the future in a Pin<Box<>> for storage
+            Box::pin(callback(client))
+        }))));
     }
 
     async fn handle_client_update(
@@ -145,7 +155,7 @@ impl ClerkFapiClient {
         client: client_period_client::ClientPeriodClient,
     ) -> Result<(), String> {
         if let Some(cb) = &self.update_client_callback {
-            let mut cb = cb.lock().unwrap(); // Lock the Mutex to get mutable access
+            let mut cb = cb.lock().await; // Lock the Mutex to get mutable access
             (cb)(client).await; // Await the async callback
             Ok(())
         } else {
@@ -2023,7 +2033,7 @@ impl Default for ClerkFapiClient {
     fn default() -> Self {
         // Create default configuration
         let config = ClerkFapiConfiguration::default();
-        
+
         // Create the client, using empty string as fallback in case of error
         Self::new(config).unwrap_or_else(|_| {
             // Create a minimal working client with default configuration

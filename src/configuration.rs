@@ -496,7 +496,7 @@ mod tests {
         assert_eq!(config.frontend_api(), "");
         assert_eq!(config.user_agent(), format!("{}/{}", NAME, VERSION));
         assert_eq!(config.store_prefix(), "ClerkFapi:");
-        
+
         // Test that the default store works
         config.set_store_value("test_key", "test_value");
         assert!(config.has_store_value("test_key"));
