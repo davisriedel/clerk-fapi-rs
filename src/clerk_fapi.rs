@@ -13,7 +13,7 @@ use reqwest_middleware::{
 use serde_json::Value as JsonValue;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::RwLock;
 
 // Add middleware definitions
@@ -84,16 +84,12 @@ impl Middleware for AuthorizationMiddleware {
     }
 }
 
-// Add this type alias for the callback signature
-type UpdateClientCallback = Box<
-    dyn Fn(client_period_client::ClientPeriodClient) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + Sync>> + Send + Sync
->;
 
 /// The main client for interacting with Clerk's Frontend API
 #[derive(Clone)]
 pub struct ClerkFapiClient {
     config: Arc<ApiConfiguration>,
-    update_client_callback: Arc<RwLock<Option<UpdateClientCallback>>>,
+    update_client_callback: Option<Arc<Mutex<Box<dyn FnMut(client_period_client::ClientPeriodClient) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>>>>
 }
 
 impl ClerkFapiClient {
@@ -127,25 +123,33 @@ impl ClerkFapiClient {
 
         Ok(Self {
             config: Arc::new(api_config),
-            update_client_callback: Arc::new(RwLock::new(None)),
+            update_client_callback: None,
         })
     }
 
     /// Sets the callback for client updates
-    pub fn set_update_client_callback(&self, callback: UpdateClientCallback) {
-        let mut cb = self.update_client_callback.write().unwrap();
-        *cb = Some(callback);
+    pub fn set_update_client_callback<F, Fut>(&mut self, callback: F)
+    where
+        F: FnMut(client_period_client::ClientPeriodClient) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+            let mut callback = callback;
+            self.update_client_callback = Some(Arc::new(Mutex::new(Box::new(move |client| {
+                // Wrap the future in a Pin<Box<>> for storage
+                Box::pin(callback(client))
+            }))));
     }
 
-    // Update the helper method to handle RwLock
     async fn handle_client_update(
         &self,
         client: client_period_client::ClientPeriodClient,
     ) -> Result<(), String> {
-        if let Some(callback) = self.update_client_callback.read().unwrap().as_ref() {
-            callback(client).await
+        if let Some(cb) = &self.update_client_callback {
+            let mut cb = cb.lock().unwrap(); // Lock the Mutex to get mutable access
+            (cb)(client).await; // Await the async callback
+            Ok(())
         } else {
-            Ok(()) // No callback registered, just succeed silently
+            Ok(())
         }
     }
 
@@ -2026,7 +2030,7 @@ impl Default for ClerkFapiClient {
             let api_config = ApiConfiguration::new();
             Self {
                 config: Arc::new(api_config),
-                update_client_callback: Arc::new(RwLock::new(None)),
+                update_client_callback: None,
             }
         })
     }
@@ -2042,6 +2046,6 @@ mod tests {
         let client = ClerkFapiClient::default();
         assert_eq!(client.config.base_path, "");
         assert!(!client.config.user_agent.is_none());
-        assert!(client.update_client_callback.read().unwrap().is_none());
+        assert!(client.update_client_callback.is_none());
     }
 }

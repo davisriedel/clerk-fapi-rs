@@ -38,27 +38,24 @@ struct ClerkState {
 impl Clerk {
     /// Creates a new ClerkFapiClient with the provided configuration
     pub fn new(config: ClerkFapiConfiguration) -> Self {
-        let api_client = ClerkFapiClient::new(config.clone()).unwrap();
-        let api_client = Arc::new(api_client);
+        let mut api_client = ClerkFapiClient::new(config.clone()).unwrap();
 
         // Create new Clerk instance
         let clerk = Self {
             config: Arc::new(config),
             state: Arc::new(RwLock::new(ClerkState::default())),
-            api_client: api_client.clone(),
+            api_client: Arc::new(api_client.clone()),
             listeners: Arc::new(Mutex::new(Vec::new())),
         };
 
         // Create and set the callback
-        let clerk_clone = clerk.clone();
-        let callback = Box::new(move |client| {
-            let clerk = clerk_clone.clone();
-            Box::pin(async move { clerk.update_client(client).await })
-                as Pin<Box<dyn Future<Output = Result<(), String>> + Send + Sync>>
-        }) as Box<dyn Fn(Client) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + Sync>> + Send + Sync>;
-
-        // Set the callback on the API client
-        api_client.set_update_client_callback(callback);
+        let clerk_ref = clerk.clone();
+        api_client.set_update_client_callback(move |client| {
+          let mut clerk_ref = clerk_ref.clone();
+          async move {
+              let _ = clerk_ref.update_client(client).await;
+          }
+        });
 
         clerk
     }
@@ -132,7 +129,7 @@ impl Clerk {
     }
 
     /// Helper function to load and set the client
-    async fn load_client(&self) -> Result<(), String> {
+    async fn load_client(&mut self) -> Result<(), String> {
         // First check if client exists in store
         if let Some(stored_client) = self.config.get_store_value("client") {
             // Try to deserialize the stored client
@@ -142,7 +139,7 @@ impl Clerk {
 
                 // Clone what we need for background task
                 let api_client = self.api_client.clone();
-                let this = self.clone();
+                let mut this = self.clone();
 
                 // Spawn background task to update client
                 tokio::spawn(async move {
@@ -205,14 +202,15 @@ impl Clerk {
     /// # Errors
     ///
     /// Returns an error if either API call fails
-    pub async fn load(self) -> Result<Self, String> {
+    pub async fn load(&self) -> Result<Self, String> {
         // Return early if already loaded
         if self.state.read().await.loaded {
-            return Ok(self);
+            return Ok(self.clone());
         }
+        let mut mut_self = self.clone();
 
         // Load environment and client concurrently
-        let (env_result, client_result) = tokio::join!(self.load_environment(), self.load_client());
+        let (env_result, client_result) = tokio::join!(self.load_environment(), mut_self.load_client());
 
         // Check results
         env_result?;
@@ -224,7 +222,7 @@ impl Clerk {
             state.loaded = true;
         }
 
-        Ok(self)
+        Ok(self.clone())
     }
 
     /// Returns whether the client has been initialized
@@ -259,7 +257,7 @@ impl Clerk {
 
     /// Updates the client state based on the provided client data
     /// This includes updating the client, session, user, and organization state
-    pub async fn update_client(&self, client: Client) -> Result<(), String> {
+    pub async fn update_client(&mut self, client: Client) -> Result<(), String> {
         let mut state = self.state.write().await;
 
         // Update client state
@@ -275,8 +273,8 @@ impl Clerk {
                 .cloned()
         });
 
-        // Update session and related state
-        self.set_accessors(&mut state, active_session)?;
+        // Remove mut self requirement from set_accessors
+        Self::set_accessors(&mut state, active_session)?;
 
         // Save client to store
         self.config.set_store_value(
@@ -310,7 +308,6 @@ impl Clerk {
 
     /// Sets the session, user and organization state based on the provided active session
     fn set_accessors<'a>(
-        &self,
         state: &mut RwLockWriteGuard<'a, ClerkState>,
         active_session: Option<Session>,
     ) -> Result<(), String> {
@@ -570,7 +567,7 @@ impl Clerk {
         }
 
         // Update all state using set_accessors
-        self.set_accessors(&mut state, Some(target_session))?;
+        Self::set_accessors(&mut state, Some(target_session))?;
 
         Ok(())
     }
@@ -1789,6 +1786,7 @@ mod tests {
         };
 
         // Update client which should trigger listener
+        let mut clerk = clerk.clone();
         clerk.update_client(test_client).await.unwrap();
 
         // Verify listener was called
@@ -1819,6 +1817,7 @@ mod tests {
         };
 
         // Update client before adding listener
+        let mut clerk = clerk.clone();
         clerk.update_client(test_client).await.unwrap();
 
         let was_called = Arc::new(AtomicBool::new(false));
