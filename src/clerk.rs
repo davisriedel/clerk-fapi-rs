@@ -502,11 +502,11 @@ impl Clerk {
             );
         }
 
-        let mut state = self.state.write().await;
+        let state = self.state.read().await;
         let client = state.client.as_ref().ok_or("Client not found")?;
 
         // Get the target session either from the argument or current session
-        let mut target_session = if let Some(sid) = session_id {
+        let target_session = if let Some(sid) = session_id {
             client
                 .sessions
                 .iter()
@@ -519,80 +519,18 @@ impl Clerk {
                 .clone()
                 .ok_or("No active session and no session_id provided")?
         };
+        drop(state);
 
-        // Parse the user data from the session if it exists
-        let user = match &target_session.user {
-            Some(Some(user_value)) => *user_value.clone(),
-            _ => return Err("No user data found in session".to_string()),
-        };
-
-        // If organization_id_or_slug is provided, update the session's last active organization
-        if let Some(org_id_or_slug) = organization_id_or_slug {
-            if org_id_or_slug.starts_with("org_") {
-                // It's an organization ID - verify it exists in user's memberships
-                let org_exists = user
-                    .organization_memberships
-                    .as_ref()
-                    .map(|memberships| {
-                        memberships.iter().any(|m| {
-                            m.organization
-                                .as_ref()
-                                .and_then(|o| o.id.as_ref())
-                                .map(|id| *id == org_id_or_slug)
-                                .unwrap_or(false)
-                        })
-                    })
-                    .unwrap_or(false);
-
-                if !org_exists {
-                    return Err(format!(
-                        "Organization with ID '{}' not found in user's memberships",
-                        org_id_or_slug
-                    ));
-                }
-                target_session.last_active_organization_id = Some(org_id_or_slug);
-            } else {
-                // Try to find organization by slug
-                let org_id = user
-                    .organization_memberships
-                    .as_ref()
-                    .and_then(|memberships| {
-                        memberships.iter().find_map(|m| {
-                            if m.organization
-                                .as_ref()
-                                .and_then(|o| o.slug.as_ref())
-                                .map(|slug| *slug == org_id_or_slug)
-                                .unwrap_or(false)
-                            {
-                                m.organization.as_ref().and_then(|o| o.id.clone())
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                    .ok_or_else(|| {
-                        format!(
-                            "Organization with slug '{}' not found in user's memberships",
-                            org_id_or_slug
-                        )
-                    })?;
-
-                target_session.last_active_organization_id = Some(org_id);
-            }
-        }
+        let active_organization_id = organization_id_or_slug.as_deref();
 
         // Touch the target session using the clerk_fapi client
         if let Some(session_id) = target_session.id.as_ref() {
             self.api_client
-                .touch_session(session_id, None)
+                .touch_session(session_id, active_organization_id)
                 .await
                 .map_err(|e| format!("Failed to touch session: {}", e))?;
         }
-
-        // Update all state using set_accessors
-        Self::set_accessors(&mut state, Some(target_session))?;
-        // Let's make sure the state is updated on the listeners as well
-        self.notify_listeners().await;
+        // We rely on the callback to update the state
 
         Ok(())
     }
