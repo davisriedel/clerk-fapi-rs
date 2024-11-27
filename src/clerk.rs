@@ -41,6 +41,7 @@ struct ClerkState {
     user: Option<User>,
     organization: Option<Organization>,
     loaded: bool,
+    target_organization_id: Option<String>,
 }
 
 impl Clerk {
@@ -343,8 +344,14 @@ impl Clerk {
                 if let Some(Some(user)) = session.user {
                     state.user = Some(*user.clone());
 
+                    let org_id_target = if let Some(org_id) = session.last_active_organization_id {
+                        Some(org_id)
+                    } else {
+                        state.target_organization_id.clone()
+                    };
+
                     // Find organization from user's memberships
-                    if let Some(last_active_org_id) = session.last_active_organization_id {
+                    if let Some(last_active_org_id) = org_id_target {
                         if let Some(ref memberships) = user.organization_memberships {
                             if let Some(Some(active_org)) = memberships
                                 .iter()
@@ -502,7 +509,7 @@ impl Clerk {
             );
         }
 
-        let state = self.state.read().await;
+        let mut state = self.state.write().await;
         let client = state.client.as_ref().ok_or("Client not found")?;
 
         // Get the target session either from the argument or current session
@@ -519,10 +526,64 @@ impl Clerk {
                 .clone()
                 .ok_or("No active session and no session_id provided")?
         };
+
+        let user = match &target_session.user {
+            Some(Some(user_value)) => *user_value.clone(),
+            _ => return Err("No user data found in session".to_string()),
+        };
+
+        let target_organization_id = if let Some(org_id_or_slug) = organization_id_or_slug {
+            if org_id_or_slug.starts_with("org_") {
+                // It's an organization ID - verify it exists in user's memberships
+                let org_exists = user
+                    .organization_memberships
+                    .as_ref()
+                    .map(|memberships| {
+                        memberships.iter().any(|m| {
+                            m.organization
+                                .as_ref()
+                                .and_then(|o| o.id.as_ref())
+                                .map(|id| *id == org_id_or_slug)
+                                .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false);
+                if !org_exists {
+                    None
+                } else {
+                    Some(org_id_or_slug)
+                }
+            } else {
+                // Try to find organization by slug
+                let org_id = user
+                    .organization_memberships
+                    .as_ref()
+                    .and_then(|memberships| {
+                        memberships.iter().find_map(|m| {
+                            if m.organization
+                                .as_ref()
+                                .and_then(|o| o.slug.as_ref())
+                                .map(|slug| *slug == org_id_or_slug)
+                                .unwrap_or(false)
+                            {
+                                m.organization.as_ref().and_then(|o| o.id.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    });
+
+                org_id
+            }
+        } else {
+            None
+        };
+
+        state.target_organization_id = target_organization_id.clone();
+        let active_organization_id = target_organization_id.as_deref();
+
+        // Need to drop the state before calling api's to avoid deadlocks
         drop(state);
-
-        let active_organization_id = organization_id_or_slug.as_deref();
-
         // Touch the target session using the clerk_fapi client
         if let Some(session_id) = target_session.id.as_ref() {
             self.api_client
