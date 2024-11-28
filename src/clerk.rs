@@ -60,9 +60,11 @@ impl Clerk {
         // Create and set the callback
         let clerk_ref = clerk.clone();
         api_client.set_update_client_callback(move |client| {
+            println!("update_client callback: {:?}", client);
             let mut clerk_ref = clerk_ref.clone();
             async move {
-                let _ = clerk_ref.update_client(client).await;
+                let r = clerk_ref.update_client(client).await;
+                println!("update_client callback: {:?}", r);
             }
         });
 

@@ -154,11 +154,14 @@ impl ClerkFapiClient {
         &self,
         client: client_period_client::ClientPeriodClient,
     ) -> Result<(), String> {
+        println!("handle_client_update: {:?}", client);
         if let Some(cb) = &self.update_client_callback {
+            println!("Has callback");
             let mut cb = cb.lock().await; // Lock the Mutex to get mutable access
             (cb)(client).await; // Await the async callback
             Ok(())
         } else {
+            println!("No callback");
             Ok(())
         }
     }
