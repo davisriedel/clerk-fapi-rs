@@ -41,7 +41,7 @@ struct ClerkState {
     user: Option<User>,
     organization: Option<Organization>,
     loaded: bool,
-    target_organization_id: Option<String>,
+    target_organization_id: Option<Option<String>>,
 }
 
 impl Clerk {
@@ -347,12 +347,18 @@ impl Clerk {
                 // Update user state from session
                 if let Some(Some(user)) = session.user {
                     state.user = Some(*user.clone());
+                    let target_org_id = state.target_organization_id.clone();
 
-                    let org_id_target = if let Some(org_id) = session.last_active_organization_id {
+                    let org_id_target = if let Some(org_id) = target_org_id {
+                        org_id
+                    } else if let Some(org_id) = session.last_active_organization_id {
                         Some(org_id)
                     } else {
-                        state.target_organization_id.clone()
+                        None
                     };
+
+                    // We've used the value --> time to reset
+                    state.target_organization_id = None;
 
                     // Find organization from user's memberships
                     if let Some(last_active_org_id) = org_id_target {
@@ -583,20 +589,17 @@ impl Clerk {
             None
         };
 
-        state.target_organization_id = target_organization_id.clone();
-        let active_organization_id = target_organization_id.as_deref();
-
+        state.target_organization_id = Some(target_organization_id.clone());
         // Need to drop the state before calling api's to avoid deadlocks
         drop(state);
         // Touch the target session using the clerk_fapi client
-        if let Some(session_id) = target_session.id.as_ref() {
-            self.api_client
-                .touch_session(session_id, active_organization_id)
-                .await
-                .map_err(|e| format!("Failed to touch session: {}", e))?;
-        }
+        let active_organization_id = target_organization_id.as_deref();
+        let session_id = target_session.id.ok_or("No session ID found")?;
+        self.api_client
+            .touch_session(&session_id, active_organization_id)
+            .await
+            .map_err(|e| format!("Failed to touch session: {}", e))?;
         // We rely on the callback to update the state
-
         Ok(())
     }
 
