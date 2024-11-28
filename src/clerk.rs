@@ -498,7 +498,6 @@ impl Clerk {
     ///
     /// Returns an error if:
     /// - Client is not loaded
-    /// - Neither current session nor session_id is available
     /// - Both arguments are None
     /// - Session ID is not found in client sessions
     /// - Organization ID/slug is not found in user's memberships
@@ -510,13 +509,6 @@ impl Clerk {
         // Check if client is loaded
         if !self.loaded().await {
             return Err("Cannot set active session before client is loaded".to_string());
-        }
-
-        // Both arguments cannot be None
-        if session_id.is_none() && organization_id_or_slug.is_none() {
-            return Err(
-                "Either session_id or organization_id_or_slug must be provided".to_string(),
-            );
         }
 
         let mut state = self.state.write().await;
