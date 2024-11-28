@@ -47,7 +47,7 @@ struct ClerkState {
 impl Clerk {
     /// Creates a new ClerkFapiClient with the provided configuration
     pub fn new(config: ClerkFapiConfiguration) -> Self {
-        let api_client = Arc::new(ClerkFapiClient::new(config.clone()).unwrap());
+        let mut api_client = Arc::new(ClerkFapiClient::new(config.clone()).unwrap());
 
         // Create new Clerk instance
         let clerk = Self {
@@ -59,7 +59,6 @@ impl Clerk {
 
         // Create and set the callback
         let clerk_ref = clerk.clone();
-        let mut api_client = Arc::clone(&clerk.api_client);
         let api_client = Arc::get_mut(&mut api_client)
             .expect("Failed to get mutable reference to api_client");
         api_client.set_update_client_callback(move |client| {
