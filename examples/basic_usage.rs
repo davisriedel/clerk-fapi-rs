@@ -26,8 +26,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create configuration
     let config = ClerkFapiConfiguration::new(
         public_key, // String
-        None, // No proxy
-        None, // No special domain
+        None,       // No proxy
+        None,       // No special domain
     )?;
 
     // Initialize Clerk client
